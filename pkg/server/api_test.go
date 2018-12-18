@@ -35,7 +35,11 @@ func TestAPIHandler(t *testing.T) {
 			serverFunc: func(poolRequest) (*ignv2_2types.Config, error) {
 				return nil, nil
 			},
-			checkResponse: checkEmptyWithStatus(http.StatusNotFound),
+			checkResponse: func(t *testing.T, response *http.Response) {
+				checkStatus(t, response, http.StatusNotFound)
+				checkContentLength(t, response, 0)
+				checkBodyLength(t, response, 0)
+			},
 		},
 		{
 			name:    "get config path that does not exist",
@@ -43,7 +47,11 @@ func TestAPIHandler(t *testing.T) {
 			serverFunc: func(poolRequest) (*ignv2_2types.Config, error) {
 				return new(ignv2_2types.Config), fmt.Errorf("not acceptable")
 			},
-			checkResponse: checkEmptyWithStatus(http.StatusInternalServerError),
+			checkResponse: func(t *testing.T, response *http.Response) {
+				checkStatus(t, response, http.StatusInternalServerError)
+				checkContentLength(t, response, 0)
+				checkBodyLength(t, response, 0)
+			},
 		},
 		{
 			name:    "get config path that exists",
@@ -51,7 +59,15 @@ func TestAPIHandler(t *testing.T) {
 			serverFunc: func(poolRequest) (*ignv2_2types.Config, error) {
 				return new(ignv2_2types.Config), nil
 			},
-			checkResponse: checkConfigGet,
+			checkResponse: func(t *testing.T, response *http.Response) {
+				checkStatus(t, response, http.StatusOK)
+				checkContentLength(t, response, 114)
+				contentType := response.Header.Get("Content-Type")
+				if contentType != "application/json" {
+					t.Errorf("response Content-Type is not application/json: %q", contentType)
+				}
+				checkBodyLength(t, response, 114)
+			},
 		},
 		{
 			name:    "head config path that exists",
@@ -59,7 +75,11 @@ func TestAPIHandler(t *testing.T) {
 			serverFunc: func(poolRequest) (*ignv2_2types.Config, error) {
 				return new(ignv2_2types.Config), nil
 			},
-			checkResponse: checkConfigHead,
+			checkResponse: func(t *testing.T, response *http.Response) {
+				checkStatus(t, response, http.StatusOK)
+				checkContentLength(t, response, 114)
+				checkBodyLength(t, response, 0)
+			},
 		},
 		{
 			name:    "post non-config path that does not exist",
@@ -67,7 +87,11 @@ func TestAPIHandler(t *testing.T) {
 			serverFunc: func(poolRequest) (*ignv2_2types.Config, error) {
 				return nil, nil
 			},
-			checkResponse: checkEmptyWithStatus(http.StatusMethodNotAllowed),
+			checkResponse: func(t *testing.T, response *http.Response) {
+				checkStatus(t, response, http.StatusMethodNotAllowed)
+				checkContentLength(t, response, 0)
+				checkBodyLength(t, response, 0)
+			},
 		},
 		{
 			name:    "post config path that exists",
@@ -75,7 +99,11 @@ func TestAPIHandler(t *testing.T) {
 			serverFunc: func(poolRequest) (*ignv2_2types.Config, error) {
 				return new(ignv2_2types.Config), nil
 			},
-			checkResponse: checkEmptyWithStatus(http.StatusMethodNotAllowed),
+			checkResponse: func(t *testing.T, response *http.Response) {
+				checkStatus(t, response, http.StatusMethodNotAllowed)
+				checkContentLength(t, response, 0)
+				checkBodyLength(t, response, 0)
+			},
 		},
 	}
 
@@ -95,78 +123,24 @@ func TestAPIHandler(t *testing.T) {
 	}
 }
 
-func checkEmpty(t *testing.T, response *http.Response) {
-	contentLength := int(response.ContentLength)
-	if contentLength != 0 {
-		t.Errorf("expected empty response, but Content-Length was %d", contentLength)
+func checkStatus(t *testing.T, response *http.Response, status int) {
+	if response.StatusCode != status {
+		t.Errorf("expected: %d, received: %d", status, response.StatusCode)
 	}
+}
 
+func checkContentLength(t *testing.T, response *http.Response, l int) {
+	if int(response.ContentLength) != l {
+		t.Errorf("expected response's Content-Length %d, but Content-Length was %d", l, int(response.ContentLength))
+	}
+}
+
+func checkBodyLength(t *testing.T, response *http.Response, l int) {
 	body, err := ioutil.ReadAll(response.Body)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(body) != 0 {
-		t.Errorf("expected empty response, but body length was %d", len(body))
+	if len(body) != l {
+		t.Errorf("expected response's body length to be %d, but body length was %d", l, len(body))
 	}
-}
-
-func checkNonEmpty(t *testing.T, response *http.Response) {
-	contentLength := int(response.ContentLength)
-	if contentLength == 0 {
-		t.Errorf("expected non-empty response, but Content-Length was 0")
-	}
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(body) != contentLength {
-		t.Errorf("response body length %d does not match Content-Length %d", len(body), contentLength)
-	}
-}
-
-func checkHeadContent(t *testing.T, response *http.Response) {
-	contentLength := int(response.ContentLength)
-	if contentLength == 0 {
-		t.Errorf("expected non-empty response, but Content-Length was 0")
-	}
-
-	body, err := ioutil.ReadAll(response.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(body) != 0 {
-		t.Errorf("expected empty HEAD response, but body length was %d", len(body))
-	}
-}
-
-func checkEmptyWithStatus(status int) checkResponse {
-	return func(t *testing.T, response *http.Response) {
-		if response.StatusCode != status {
-			t.Errorf("expected: %d, received: %d", status, response.StatusCode)
-		}
-
-		checkEmpty(t, response)
-	}
-}
-
-func checkConfig(t *testing.T, response *http.Response) {
-	if response.StatusCode != http.StatusOK {
-		t.Errorf("expected: %d, received: %d", http.StatusNotFound, response.StatusCode)
-	}
-
-	contentType := response.Header.Get("Content-Type")
-	if contentType != "application/json" {
-		t.Errorf("response Content-Type is not application/json: %q", contentType)
-	}
-}
-
-func checkConfigGet(t *testing.T, response *http.Response) {
-	checkConfig(t, response)
-	checkNonEmpty(t, response)
-}
-
-func checkConfigHead(t *testing.T, response *http.Response) {
-	checkConfig(t, response)
-	checkHeadContent(t, response)
 }
