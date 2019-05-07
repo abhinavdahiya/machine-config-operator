@@ -106,9 +106,7 @@ func RenderBootstrap(
 		templatectrl.KubeClientAgentImageKey: imgs.KubeClientAgent,
 	}
 
-	// TODO(abhinavdahiya): remove this migration when https://github.com/openshift/installer/pull/1718 merges
-	apiServerURL := getAPIServerURL(infra)
-	config := getRenderConfig("", string(filesData[kubeAPIServerServingCA]), spec, imgs, apiServerURL)
+	config := getRenderConfig("", string(filesData[kubeAPIServerServingCA]), spec, imgs, infra.Status.APIServerInternalURL)
 
 	manifests := []struct {
 		name     string
